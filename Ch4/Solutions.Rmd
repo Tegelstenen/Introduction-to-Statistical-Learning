@@ -1,0 +1,144 @@
+---
+title: "Solutions to Applied Questions — Chapter 4"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ISLR2)
+library(dplyr)
+library(ggplot2)
+```
+
+# Questions 13
+
+This question should be answered using the `Weekly` data set, which is part of the `ISLR2` package. This data is similar in nature to the `Smarket` data from this chapter’s lab, except that it contains 1,089 weekly returns for 21 years, from the beginning of 1990 to the end of 2010.
+
+**a) Produce some numerical and graphical summaries of the `Weekly` data. Do there appear to be any patterns?**
+
+There appears to be an exponential relation between `Year` and `Volume`. There is also a significance in the correlation between all the lags. `Volume` appears significantly correlated with the other variables as well, except possibly `Today` which is only significantly correlated with `Lag1`, `Lag2`, and `Lag3`.
+
+```{r}
+summary(Weekly)
+Hmisc::rcorr(as.matrix(Weekly[,-9]))
+pairs(Weekly, col=Weekly$Direction)
+```
+
+
+**(b) Use the full data set to perform a logistic regression with `Direction` as the response and the five lag variables plus `Volume` as predictors. Use the summary function to print the results. Do any of the predictors appear to be statistically significant? If so, which ones?**
+
+`Lag2` is the only significant predictor in this model.
+
+```{r}
+model <- glm(Direction ~ . - Year - Today, data = Weekly, family = "binomial")
+summary(model)
+```
+
+**(c) Compute the confusion matrix and overall fraction of correct predictions. Explain what the confusion matrix is telling you about the types of mistakes made by logistic regression.**
+
+It is only very slightly better than a random walk. However, in the field of finance, any margins a vital.
+
+```{r}
+probs <- predict(model, type = "response")
+preds <- rep("Down", length(probs))
+preds[probs > .5] = "Up"
+table(preds, Weekly$Direction)
+mean(preds == Weekly$Direction)
+```
+
+
+**(d) Now fit the logistic regression model using a training data period from 1990 to 2008, with `Lag2` as the only predictor. Compute the confusion matrix and the overall fraction of correct predictions for the held out data (that is, the data from 2009 and 2010).**
+
+We can observe an improvement from .56 to .65 in the prediction error rate.
+
+```{r}
+model <- glm(
+    Direction ~ Lag2,
+    data = Weekly,
+    family = "binomial",
+    subset = Year <= 2008
+)
+
+subData <- subset(Weekly, Weekly$Year > 2008)
+probs <- predict(model,
+                 newdata = subData,
+                 type = "response")
+
+preds <- rep("Down", length(probs))
+preds[probs > .5] = "Up"
+table(preds, subData$Direction)
+mean(preds == subData$Direction)
+```
+
+**(e) Repeat (d) using LDA.**
+
+Performce slightly worse than logistic regression.
+
+```{r}
+model <- MASS::lda(Direction ~ Lag2,
+          data = Weekly,
+          subset = Year <= 2008)
+
+preds <- predict(model,
+                 newdata = subData,
+                 type = "response")
+
+table(preds$class, subData$Direction)
+mean(preds$class == subData$Direction)
+```
+
+**(f) Repeat (d) using QDA.**
+
+Both worse performing than LDA and logistic.
+
+```{r}
+model <- MASS::qda(Direction ~ Lag2,
+          data = Weekly,
+          subset = Year <= 2008)
+
+preds <- predict(model,
+                 newdata = subData,
+                 type = "response")
+
+table(preds$class, subData$Direction)
+mean(preds$class == subData$Direction)
+```
+
+**(g) Repeat (d) using KNN with K = 1.**
+
+Like a random walk.
+
+```{r}
+preds <-
+    class::knn(train = Weekly[Weekly$Year < 2009, "Lag2", drop = FALSE],
+               test = Weekly[!(Weekly$Year < 2009), "Lag2", drop = FALSE],
+               cl = Weekly$Direction[Weekly$Year < 2009])
+table(preds, subData$Direction)
+mean(preds == subData$Direction)
+```
+
+
+**(h) Repeat (d) using naive Bayes.**
+
+Same performance as QDA.
+
+```{r}
+model <- e1071::naiveBayes(Direction ~ Lag2,
+          data = Weekly,
+          subset = Year <= 2008)
+
+preds <- predict(model,
+                 newdata = subData)
+
+table(preds, subData$Direction)
+mean(preds == subData$Direction)
+```
+
+**(i) Which of these methods appears to provide the best results on this data?**
+
+Logistics.
+
+**(j) Experiment with different combinations of predictors, including possible transformations and interactions, for each of the methods. Report the variables, method, and associated confusion matrix that appears to provide the best results on the held out data. Note that you should also experiment with values for K in the KNN classifier.**
